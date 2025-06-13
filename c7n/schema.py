@@ -329,6 +329,9 @@ def get_default_definitions(resource_defs):
                 'filters': {
                     'type': 'array'
                 },
+                'report_slack': {
+                    'type': 'string'
+                },
                 #
                 # TODO: source queries should really move under
                 # source. This was initially used for describe sources

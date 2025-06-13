@@ -130,6 +130,10 @@ def _report_options(p):
     p.add_argument(
         '--all-findings', default=False, action="store_true",
         help="Outputs all findings per resource. Defaults to a single finding per resource. ")
+    p.add_argument(
+        '--slack-webhook', default=None, metavar='URL',
+        help="Post report to this Slack webhook; "
+             "overridden by each policy's report_slack if present")
 
 
 def _metrics_options(p):

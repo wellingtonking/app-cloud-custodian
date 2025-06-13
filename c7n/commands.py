@@ -336,7 +336,10 @@ def report(options, policies):
     delta = timedelta(days=options.days)
     begin_date = datetime.now() - delta
     do_report(
-        policies, begin_date, options, sys.stdout, raw_output_fh=options.raw)
+        policies, begin_date, options, sys.stdout,
+        raw_output_fh=options.raw,
+        slack_webhook=options.slack_webhook,
+    )
 
 
 @policy_command

@@ -23,7 +23,7 @@ install:
 	    --group dev \
 	    --group addons \
 	    --group lint \
-            --extra gcp --extra azure
+	    --extra gcp --extra azure
 
 .PHONY: test
 

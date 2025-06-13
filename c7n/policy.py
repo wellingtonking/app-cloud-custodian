@@ -1242,6 +1242,11 @@ class Policy:
             return False
         return True
 
+    @property
+    def report_slack(self):
+        """Return Slack webhook URL for policy reporting if configured."""
+        return self.data.get('report_slack', None)
+
     def validate(self):
         self.conditions.validate()
         m = self.get_execution_mode()

@@ -16,7 +16,7 @@ class StructureParser:
     required_policy_keys = {'name', 'resource'}
     allowed_policy_keys = {'name', 'resource', 'title', 'description', 'mode',
          'tags', 'max-resources', 'metadata', 'query',
-         'filters', 'actions', 'source', 'conditions',
+         'filters', 'actions', 'source', 'conditions', 'report_slack',
          # legacy keys subject to deprecation.
          'region', 'start', 'end', 'tz', 'max-resources-percent',
          'comments', 'comment'}
@@ -55,7 +55,8 @@ class StructureParser:
         pkeys = set(p)
         if self.required_policy_keys.difference(pkeys):
             raise PolicyValidationError(
-                'policy missing required keys (name, resource) data:\n %s' % (
+                'policy missing required key(s): %s. Data:\n %s' % (
+                    ', '.join(self.required_policy_keys.difference(pkeys)),
                     json.dumps(p, indent=2)))
         if pkeys.difference(self.allowed_policy_keys):
             raise PolicyValidationError(

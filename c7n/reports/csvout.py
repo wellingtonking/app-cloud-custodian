@@ -37,6 +37,7 @@ import io
 import json
 import logging
 import os
+from urllib import error as urlerror, request as urlrequest
 from tabulate import tabulate
 
 from botocore.compat import OrderedDict
@@ -62,7 +63,105 @@ def strip_output_path(path, policy_name):
     return ''.join(path.strip('/').rpartition(policy_name)[:-1])
 
 
-def report(policies, start_date, options, output_fh, raw_output_fh=None):
+def _post_to_slack(webhook_url, payload):
+    """Send JSON payload to the given Slack webhook."""
+    req = urlrequest.Request(
+        webhook_url,
+        data=json.dumps(payload).encode('utf-8'),
+        headers={'Content-Type': 'application/json'},
+    )
+    try:
+        urlrequest.urlopen(req, timeout=10)
+    except urlerror.URLError as e:
+        log.warning('Error posting Slack message: %s', e)
+
+
+def _send_slack_report(policy_name, headers, rows, webhook_url):
+    """Post a formatted table of results to Slack."""
+    table = tabulate(rows[:10], headers, tablefmt='github') if rows else 'No matches'
+    text = f"*Policy:* `{policy_name}`\n```{table}```"
+    elements = []
+    if len(rows) > 0:
+        # Add each row as a Slack text element, limit to 5 rows during development
+        # to avoid hitting Slack's message size limits (maybe).
+        for row in rows[:5]:
+            #row_text = ', '.join(str(value) for value in row)
+            row_text = row[0]
+            elements.append({
+                "type": "rich_text_section",
+                "elements": [
+                    {
+                        "type": "text",
+                        "text": f"{row_text}",
+                        "style": {
+                            "code": True
+                        }
+                    }
+                ]
+            })
+
+        body = {
+            "type": "rich_text",
+            "elements": [
+                {
+                    "type": "rich_text_list",
+                    "style": "bullet",
+                    "elements": elements,
+                }
+            ]
+        }
+    else:
+        body = {
+            "type": "rich_text",
+            "elements": [
+                {
+                    "type": "rich_text_section",
+                    "elements": [
+                        {
+                            "type": "text",
+                            "text": "No matching resources reported."
+                        }
+                    ]
+                }
+            ]
+        }
+
+
+    payload = {
+        'blocks': [
+            {
+                "type": "header",
+                "text": {
+                    "type": "plain_text",
+                    "text": "Cloud Custodian Report",
+                }
+            },
+            {
+                "type": "context",
+                "elements": [
+                    {
+                        "type": "mrkdwn",
+                        "text": "Resources found to have failed the policies checks will be reported below."
+                    }
+                ]
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"*Policy Name:* `{policy_name}`"
+                }
+            },
+            body,
+        ]
+    }
+    # Pretty print the payload for debugging
+    print("Slack payload: %s", json.dumps(payload, indent=2))
+
+    _post_to_slack(webhook_url, payload)
+
+
+def report(policies, start_date, options, output_fh, raw_output_fh=None, slack_webhook=None):
     """Format a policy's extant records into a report."""
     regions = {p.options.region for p in policies}
     policy_names = {p.name for p in policies}
@@ -75,6 +174,7 @@ def report(policies, start_date, options, output_fh, raw_output_fh=None):
     )
 
     records = []
+    slack_targets = []
     for policy in policies:
         # initialize policy execution context for output access
         policy.ctx.initialize()
@@ -93,6 +193,8 @@ def report(policies, start_date, options, output_fh, raw_output_fh=None):
             record['policy'] = policy.name
             record['region'] = policy.options.region
 
+        policy_rows = formatter.to_csv(policy_records, unique=not options.all_findings)
+        slack_targets.append((policy.report_slack or slack_webhook, policy.name, policy_rows))
         records += policy_records
 
     rows = formatter.to_csv(records, unique=not options.all_findings)
@@ -106,6 +208,15 @@ def report(policies, start_date, options, output_fh, raw_output_fh=None):
     else:
         # We special case CSV, and for other formats we pass to tabulate
         print(tabulate(rows, formatter.headers(), tablefmt=options.format))
+
+    for url, pname, prows in slack_targets:
+        if not url:
+            continue
+        log.info("Posting %s report to Slack webhook %s", pname, url)
+        _send_slack_report(pname, list(formatter.headers()), prows, url)
+
+    if not any(url for url, _, _ in slack_targets):
+        log.debug("No Slack webhook enabled")
 
     if raw_output_fh is not None:
         dumps(records, raw_output_fh, indent=2)

@@ -458,6 +458,40 @@ class ReportTest(CliTest):
             1,
         )
 
+    def test_report_slack_webhook(self):
+        policy_name = "ec2-running-instances"
+        policies = {
+            "policies": [
+                {
+                    "name": policy_name,
+                    "resource": "ec2",
+                    "query": [{"instance-state-name": "running"}],
+                }
+            ]
+        }
+        yaml_file = self.write_policy_file(policies)
+
+        from c7n.reports import csvout
+
+        calls = []
+
+        def fake_send(name, headers, rows, url):
+            calls.append((name, url))
+
+        self.patch(csvout, "_send_slack_report", fake_send)
+
+        self.get_output([
+            "custodian",
+            "report",
+            "--slack-webhook",
+            "https://hooks.slack.com/T000",
+            "-s",
+            self.output_dir,
+            yaml_file,
+        ])
+
+        self.assertEqual(calls, [(policy_name, "https://hooks.slack.com/T000")])
+
 
 class LogsTest(CliTest):
 
